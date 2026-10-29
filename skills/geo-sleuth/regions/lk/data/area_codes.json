@@ -13,9 +13,9 @@
    "https://www.itu.int/oth/T02020000C3 (TRCSL numbering plan filed with the ITU, communication of 12.III.2008, update 17.VIII.2009)",
    "https://en.wikipedia.org/wiki/Telephone_numbers_in_Sri_Lanka",
    "https://www.openstreetmap.org (phone=*/contact:phone=* placed in boundary=administrative admin_level=5 polygons)",
-   "Government of Sri Lanka RTI designated-officer directory (local authority numbers: Embilipitiya UC, Ruwanwella PS, Dehiattakandiya PS)",
-   "Ministry of Education school census 2015 (Hanguranketha education office under Nuwara Eliya District)",
-   "Department of Posts post-office directory (Hanguranketha post offices on 081)"
+   "https://rti.gov.lk/do-list/ (Government of Sri Lanka RTI designated-officer directory; local authority numbers: Embilipitiya UC, Ruwanwella PS, Dehiattakandiya PS)",
+   "https://www.statistics.gov.lk/Resource/en/Education/School_Census/2015.pdf (Ministry of Education school census 2015; Hanguranketha education office under Nuwara Eliya District)",
+   "https://slpost.gov.lk/si/information/main-offices-directorate/ (Department of Posts post-office directory; Hanguranketha post offices on 081)"
   ],
   "fetched": "2026-10-27",
   "license": "Derived from ITU/TRCSL numbering plan, Wikipedia (CC BY-SA 4.0) and OpenStreetMap (ODbL); government directory numbers used as facts, not copied",
