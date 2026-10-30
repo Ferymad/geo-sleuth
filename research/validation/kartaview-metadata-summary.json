@@ -1,0 +1,11 @@
+{
+  "status": "success_unknown_coverage",
+  "count": 70,
+  "returned_count": 70,
+  "duplicate_count": 0,
+  "failure_count": 0,
+  "coverage": "bounded/unknown",
+  "has_more": false,
+  "response_sha256": "f7ea0ad2bf503c7e920387478dcae3c886401d9110cf07d2d832576570b67c86",
+  "retrieved_at": "2026-10-30T01:28:37.717271+00:00"
+}

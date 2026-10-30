@@ -1,0 +1,38 @@
+
+0 candidates with coordinates (WGS84):
+  None. Try another spelling (drop the "小区/花园" (compound/garden) suffix, add the district name), or use revimg.py --query to search the web for an address
+test_bundled_packs_pass_lint (__main__.BundledPacks.test_bundled_packs_pass_lint) ... ok
+test_cn_lookups_keep_their_answers (__main__.BundledPacks.test_cn_lookups_keep_their_answers) ... ok
+test_country_without_that_table_is_unsupported (__main__.BundledPacks.test_country_without_that_table_is_unsupported) ... ok
+test_descriptions_are_not_places (__main__.BundledPacks.test_descriptions_are_not_places) ... ok
+test_foreign_plate_format_is_not_matched_against_cn (__main__.BundledPacks.test_foreign_plate_format_is_not_matched_against_cn) ... ok
+test_malformed_optional_settings_do_not_break_other_packs (__main__.BundledPacks.test_malformed_optional_settings_do_not_break_other_packs) ... ok
+test_poi_default_sources_come_from_the_pack_that_claims_the_script (__main__.BundledPacks.test_poi_default_sources_come_from_the_pack_that_claims_the_script) ... ok
+test_same_name_districts_stay_apart (__main__.BundledPacks.test_same_name_districts_stay_apart) ... ok
+test_script_names_must_be_a_list_not_an_accidental_character_prefix_set (__main__.BundledPacks.test_script_names_must_be_a_list_not_an_accidental_character_prefix_set) ... ok
+test_unknown_country_is_unsupported_not_china (__main__.BundledPacks.test_unknown_country_is_unsupported_not_china) ... ok
+test_admin_alias_finds_the_table_name (__main__.FixturePack.test_admin_alias_finds_the_table_name) ... ok
+test_board_country_drives_apply_and_next (__main__.FixturePack.test_board_country_drives_apply_and_next) ... ok
+test_broken_pack_doesnt_break_other_countries (__main__.FixturePack.test_broken_pack_doesnt_break_other_countries) ... ok
+test_country_context_doesnt_overwrite_global_observations (__main__.FixturePack.test_country_context_doesnt_overwrite_global_observations) ... ok
+test_country_context_doesnt_stand_in_for_unknown_countries (__main__.FixturePack.test_country_context_doesnt_stand_in_for_unknown_countries) ... ok
+test_country_restricts (__main__.FixturePack.test_country_restricts) ... ok
+test_country_without_the_table_is_not_down_weighted (__main__.FixturePack.test_country_without_the_table_is_not_down_weighted) ... ok
+test_lint_rejects_code_merged_names_and_missing_sources (__main__.FixturePack.test_lint_rejects_code_merged_names_and_missing_sources) ... ok
+test_lint_reports_malformed_optional_manifest_settings (__main__.FixturePack.test_lint_reports_malformed_optional_manifest_settings) ... ok
+test_malformed_aliases_fail_lint_and_leave_lookups_working (__main__.FixturePack.test_malformed_aliases_fail_lint_and_leave_lookups_working) ... ok
+test_multi_place_key_gives_one_candidate_each (__main__.FixturePack.test_multi_place_key_gives_one_candidate_each) ... ok
+test_no_country_returns_every_country (__main__.FixturePack.test_no_country_returns_every_country) ... ok
+test_province_and_same_stem_city_are_two_places (__main__.FixturePack.test_province_and_same_stem_city_are_two_places) ... ok
+test_removing_the_pack_leaves_cn_unchanged (__main__.FixturePack.test_removing_the_pack_leaves_cn_unchanged) ... ok
+test_same_name_elsewhere_gets_its_own_candidate (__main__.FixturePack.test_same_name_elsewhere_gets_its_own_candidate) ... ok
+test_siblings_listed_by_children_are_down_weighted (__main__.FixturePack.test_siblings_listed_by_children_are_down_weighted) ... ok
+test_driving_side_of_split_countries (__main__.GlobalTables.test_driving_side_of_split_countries) ... ok
+test_poi_region_without_pack_keeps_the_country_filter (__main__.SameNamesAndPoi.test_poi_region_without_pack_keeps_the_country_filter) ... No region pack for 'in': OSM only, restricted to countrycodes=in
+ok
+test_same_name_under_another_parent_is_kept (__main__.SameNamesAndPoi.test_same_name_under_another_parent_is_kept) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 1.911s
+
+OK

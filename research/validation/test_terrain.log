@@ -1,0 +1,8 @@
+.................<WORKSPACE>/skills/geo-sleuth/scripts/terrain.py:498: ResourceWarning: unclosed file <_io.BufferedReader name='<SCRATCH>/tmp2dy2mdey/p.jpg'>
+  ifd = open_image(photo, load=False).getexif().get_ifd(0x8769)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.
+----------------------------------------------------------------------
+Ran 18 tests in 0.533s
+
+OK

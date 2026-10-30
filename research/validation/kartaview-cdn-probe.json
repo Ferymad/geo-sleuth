@@ -1,0 +1,8 @@
+{
+  "source": "KartaView metadata imageProcUrl",
+  "url": "https://cdn.kartaview.org/pr:sharp/aHR0cHM6Ly9zdG9yYWdlMTMub3BlbnN0cmVldGNhbS5vcmcvZmlsZXMvcGhvdG8vMjAyMC80LzcvcHJvYy8yMTAzMjUwXzhfMWMzZWNfNDcuanBn",
+  "photo_id": "616387694",
+  "exit_code": 56,
+  "stderr": "curl: (56) The requested URL returned error: 500\n",
+  "file": null
+}

@@ -5,7 +5,7 @@
 # ///
 """Steps 0–3 of geolocation in one command: metadata, zoomed four edges and four corners, search variants, OCR, reverse image search, run in parallel, one report.
 
-Outputs (all in --out-dir):
+Outputs (all in a fresh --out-dir; existing intake artifacts are never overwritten):
   exif.json  edges/  variants/  ocr.json ocr.png  rev/<name>_<engine>.png + .json  intake.md  intake.json
   work/<name>.png  only when the photo needs it: HEIC/WebP/... decoded, or an EXIF orientation applied. A lossless upright
                    copy with the original's EXIF (orientation reset); every step below then uses it, and intake.json "input"
@@ -32,6 +32,7 @@ from _net import PROXY_HELP
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -52,14 +53,34 @@ KNOWN_CITIES = ("北京", "上海", "天津", "重庆", "广州", "深圳", "成
                 "曼谷", "新加坡", "吉隆坡", "伦敦", "巴黎", "纽约", "洛杉矶", "悉尼", "墨尔本", "温哥华", "多伦多", "莫斯科", "柏林", "罗马", "马德里")
 
 
-def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 900) -> tuple[int, str, str]:
+def _run(cmd: list[str], cwd: Path | None = None, timeout: float = 900) -> tuple[int, str, str]:
+    env = {**os.environ, "PYTHONUTF8": "1"}
     try:
-        # Child scripts and this one both use UTF-8: Chinese Windows reads and writes GBK by default, and if the two sides differ you get mojibake or crashes
-        r = subprocess.run(cmd, text=True, encoding="utf-8", errors="replace", capture_output=True, cwd=cwd, timeout=timeout,
-                           env={**os.environ, "PYTHONUTF8": "1"})
-        return r.returncode, r.stdout, r.stderr
-    except subprocess.TimeoutExpired:
-        return 124, "", f"timed out after {timeout}s"
+        if os.name == "nt":
+            # Keep the Windows subprocess contract; POSIX groups are not available there.
+            r = subprocess.run(cmd, capture_output=True, timeout=timeout, text=True,
+                               encoding="utf-8", errors="replace", cwd=cwd, env=env)
+            return r.returncode, r.stdout, r.stderr
+        # uv launches Python, which may launch browsers. A timeout must stop the whole
+        # owned process group, not leave children uploading or changing the report's files.
+        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                              encoding="utf-8", errors="replace", cwd=cwd, env=env,
+                              start_new_session=True) as child:
+            try:
+                stdout, stderr = child.communicate(timeout=timeout)
+                return child.returncode, stdout, stderr
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                stdout, stderr = child.communicate()
+                return 124, stdout, f"{stderr}\ntimed out after {timeout}s".strip()
+    except subprocess.TimeoutExpired as exc:
+        # TimeoutExpired can carry bytes even when text=True (notably on Windows).
+        def text(value):
+            return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+        return 124, text(exc.stdout), f"{text(exc.stderr)}\ntimed out after {timeout}s".strip()
 
 
 def _script(name: str) -> str:
@@ -90,17 +111,50 @@ def _classify(tag: str) -> str:
     return "other"
 
 
+def _redact_error(text: str) -> str:
+    """Keep diagnostic URL hosts/paths, never their userinfo credentials."""
+    return re.sub(r"([a-zA-Z][a-zA-Z0-9+.-]*://)[^\s/?#]*@", r"\1[redacted]@", text)
+
+
 def _collect_rev(rev_dir: Path) -> tuple[list[dict], dict]:
     """Read revimg's .json files: guess/links for each image and engine, and do the tiered vote count."""
     entries = []
     for jf in sorted(rev_dir.glob("*.json")):
-        try:
-            d = json.loads(jf.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            continue
         m = re.match(r"(.+)_(baidu|yandex|bing|baiduimg|sogouimg)$", jf.stem)
         if not m:
             continue
+        try:
+            d: dict = json.loads(jf.read_text(encoding="utf-8"))
+            if not isinstance(d, dict):
+                raise ValueError("expected a JSON object")
+            # revimg._collect always returns both lists, even for no hits. Its
+            # error-only paths do not. Do not turn absent/null fields into a
+            # completed empty search; screenshots and nonempty hits are optional.
+            if not (isinstance(d.get("error"), str) and d["error"].strip()) and d.get("refused") is not True:
+                if "guess" not in d or "links" not in d:
+                    raise ValueError("incomplete result: expected guess and links lists or a provider error")
+            for key, kind in (("guess", str), ("links", dict), ("similar", dict)):
+                if key not in d:
+                    continue
+                value = d[key]
+                if not isinstance(value, list) or any(not isinstance(x, kind) for x in value):
+                    raise ValueError(f"invalid {key} list")
+            for key in ("error", "similar_sheet", "similar_sheet_note", "url", "text_head"):
+                if key in d and not isinstance(d[key], str):
+                    raise ValueError(f"invalid {key}")
+            if "refused" in d and not isinstance(d["refused"], bool):
+                raise ValueError("invalid refused flag")
+            for link in d.get("links", []):
+                if any(not isinstance(link.get(k), str) for k in ("title", "url", "site")):
+                    raise ValueError("invalid or incomplete link text")
+            for item in d.get("similar", []):
+                if any(not isinstance(item.get(k), str) for k in ("thumb", "from", "site")):
+                    raise ValueError("invalid or incomplete similar image")
+            if d.get("error"):
+                d["error"] = _redact_error(d["error"])
+        except (OSError, ValueError) as exc:
+            # A killed child can leave truncated JSON. Keep a named failure and all valid siblings.
+            d = {"error": _redact_error(f"Cannot read {jf.name}: {exc}")}
         simi = d.get("similar") or []
         entries.append({"variant": m.group(1), "engine": m.group(2), "guess": d.get("guess") or [], "links": (d.get("links") or [])[:8],
                         "error": d.get("error"), "refused": bool(d.get("refused")), "shot": str(jf.with_suffix(".png").name),
@@ -131,7 +185,7 @@ def _collect_rev(rev_dir: Path) -> tuple[list[dict], dict]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("photo")
-    ap.add_argument("--out-dir", type=Path, required=True)
+    ap.add_argument("--out-dir", type=Path, required=True, help="fresh output directory; existing intake artifacts are never overwritten")
     ap.add_argument("--box", action="append", help="x0,y0,x1,y1: tight-crop variant, repeatable")
     ap.add_argument("--engines", default="baidu,yandex")
     ap.add_argument("--exclude", help="words to exclude from reverse image search results (for blind tests)")
@@ -140,9 +194,21 @@ def main() -> None:
     ap.add_argument("--max-variants", type=int, default=4, help="max number of variants each engine searches (besides the original)")
     ap.add_argument("--proxy", default=os.environ.get("GEO_PROXY"), help=PROXY_HELP)
     args = ap.parse_args()
+    if args.max_variants < 0:
+        ap.error("--max-variants must be zero or greater")
+    engines = args.engines.split(",")
+    if not args.no_rev and (any(e not in ("baidu", "yandex") for e in engines) or len(set(engines)) != len(engines)):
+        ap.error("--engines must list baidu and/or yandex exactly once each (comma-separated); use --no-rev to skip search")
 
     photo = Path(args.photo).resolve()
     out = args.out_dir
+    # Mixing old OCR, crops or provider records into a rerun fabricates evidence.
+    # Preserve completed/interrupted runs; recovery uses a separate output directory.
+    managed = ("exif.json", "ocr.json", "ocr.png", "intake.json", "intake.md", "edges", "variants", "rev", "work")
+    existing = [name for name in managed if (out / name).exists()]
+    if existing:
+        ap.error(f"output directory contains intake artifacts ({', '.join(existing)}); "
+                 "use a fresh --out-dir for this run. Existing evidence has not been changed.")
     out.mkdir(parents=True, exist_ok=True)
     (out / "edges").mkdir(exist_ok=True)
     (out / "variants").mkdir(exist_ok=True)
@@ -154,9 +220,9 @@ def main() -> None:
         t0 = time.time()
         try:
             res = fn()
-            status[name] = "ok" if res[0] == 0 else f"failed: {(res[2] or res[1])[-300:].strip()}"
+            status[name] = "ok" if res[0] == 0 else f"failed: {_redact_error(res[2] or res[1])[-300:].strip()}"
         except Exception as e:  # noqa: BLE001
-            status[name] = f"exception: {e}"
+            status[name] = f"exception: {_redact_error(str(e))}"
             res = (1, "", str(e))
         timings[name] = round(time.time() - t0, 1)
         return res
@@ -220,10 +286,18 @@ def main() -> None:
             return _run(cmd, timeout=900)
 
         with ThreadPoolExecutor(2) as ex:
-            futs = {eng: ex.submit(timed, f"rev-{eng}", (lambda e=eng: (lambda: rev(e)))()) for eng in [e for e in args.engines.split(",") if e]}
+            futs = {eng: ex.submit(timed, f"rev-{eng}", lambda e=eng: rev(e)) for eng in engines}
             for eng, f in futs.items():
                 f.result()
         entries, votes = _collect_rev(rev_dir)
+        for eng in futs:
+            engine_entries = [e for e in entries if e["engine"] == eng]
+            errors = [f"{e['variant']}: {e['error'] or 'refused'}" for e in engine_entries
+                      if e["error"] or e["refused"]]
+            if len(engine_entries) != len(images):
+                errors.append(f"received {len(engine_entries)} of {len(images)} expected result records; search incomplete")
+            if errors and status.get(f"rev-{eng}") == "ok":
+                status[f"rev-{eng}"] = "failed: " + "; ".join(errors)[:300]
 
     ocr_items = []
     if (out / "ocr.json").exists():
@@ -269,7 +343,7 @@ def main() -> None:
     if args.no_rev:
         L.append("Not done (--no-rev). This is not \"searched, nothing found\".")
     else:
-        for eng in args.engines.split(","):
+        for eng in engines:
             st = status.get(f"rev-{eng}", "not run")
             L.append(f"- {eng}: {st}")
         refused = [e for e in entries if e["error"] or e["refused"]]

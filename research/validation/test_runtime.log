@@ -1,0 +1,19 @@
+# Steps 0–3 report: photo.jpg
+
+Total time 0s; per step: exif 0.1s, variants 0.1s, edges 0.2s, rev-baidu 0.0s, rev-yandex 0.0s
+
+**Result: partial.** Failed: rev-baidu, rev-yandex (reasons under Status); the other steps' outputs below are usable.
+
+-> <SCRATCH>/tmpqtvnmz0b/out/intake.md (read this)
+..............................................................................................No Overpass mirror returned a result, retrying in 15 s: overpass-api.de HTTP 406: Not Acceptable; overpass.private.coffee HTTP 500: Internal Server Error; maps.mail.ru HTTP 504: server too busy
+No Overpass mirror returned a result, retrying in 30 s: overpass-api.de HTTP 406: Not Acceptable; overpass.private.coffee HTTP 500: Internal Server Error; maps.mail.ru HTTP 504: server too busy
+.Rechecking an old empty area cache against the mirrors
+..Only https://overpass-api.de/api/interpreter answered, with an empty --area result; not confirmed by a second mirror, so not cached. Rerun later, or use --bbox, before treating it as "none".
+.Rechecking an old empty area cache against the mirrors
+Only https://overpass-api.de/api/interpreter answered, with an empty --area result; not confirmed by a second mirror, so not cached. Rerun later, or use --bbox, before treating it as "none".
+Rechecking an old empty area cache against the mirrors
+..............
+----------------------------------------------------------------------
+Ran 112 tests in 7.902s
+
+OK

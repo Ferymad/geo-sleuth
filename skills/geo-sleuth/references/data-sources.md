@@ -15,6 +15,9 @@
 | `tiles.py` | Satellite tile mosaic, `mark` plots points + overlays GeoJSON lines + field-of-view wedge, `sheet` numbered thumbnails of candidate points |
 | `baidu_pano.py` | Baidu panoramas: near / info / scan / render / sheet (`--headings` to look around from one point, `--road` `--spread`) / sample (street view sampling of candidate cities) |
 | `gsv.py` | Google Street View (outside China): near / render / sheet / `targets` (panoramas around each target point, rendered facing it, for `match.py --items`), no key, official coverage only |
+| `kartaview.py` | One bounded public metadata response with normalized dated reference candidates and explicit unknown coverage; optional single finished/blurred thumbnail fetch with failure report and local `--images` matching path. Live metadata verified; live thumbnail access remained blocked during development |
+| `fspy.py` | Offline inspector for the documented fSpy v1 project: full-project hash, raw saved calibration/reference settings and explicit unverified scale/geographic anchor; does not extract the embedded image or solve pose |
+| `pose_preflight.py` | Opt-in input/control audit using the existing pose model's free-count: malformed values, metadata gaps, duplicate/spatially weak controls and conditional geometry warnings; no solver/radius certification or automatic exclusion |
 | `pose.py` | Solve camera position from multiple points: lat/lon, height, heading, pitch, roll, field of view + error radius + per-point check; `check` scores discrete candidate camera positions; `project` projects map points back onto the photo |
 | `terrain.py` | Elevation: view (synthesized mountain view; `--overlay` overlays the skyline on the photo, `--roll`) / profile (skyline) / elev / `ridge` reads ridgeline pixel points from the photo / `scan` filters a whole region along infrastructure lines for "flat nearby + mountain present" points and clusters them / `fit` batch skyline scoring of candidate camera positions (optional infrastructure-distance constraint; outputs overlays of the top N) |
 | `evidence.py` | Evidence image: satellite image + camera-position wedge + comparison panels |
@@ -24,6 +27,8 @@
 | `regions.py` | Region packs: `list`, `show <cc>` (lookups, services, tips, clue index with line numbers), `lint` (pack contract) |
 | `refresh.py` | Maintainers: re-fetch the global tables and the China pack's tables from their sources |
 | `board.py` | Candidate board: candidates, clues, evidence likelihood ratios, exclusions (require a computed file), ranking, scan cost, next step, pre-conclusion check, generates result.json fields |
+| `investigation.py` | Offline route/attempt ledger: actual commands, success/empty/blocked/partial outcomes, retained artifact hashes, pending actions, resumable state and qualified stop gates; see [playbook](investigation.md) |
+| `evaluate.py` | Offline scoring of frozen predictions against evaluator-held truth: all-case accuracy, abstentions, errors and empirical radius coverage; see [evaluation](evaluation.md) |
 | `gazetteer.py` | Admin-division gazetteer: lists all subdivisions (with bbox), built-up area extents, scan pages |
 | `sat_scan.py` | CLIP zero-shot scoring and ranking of satellite grid cells/candidate points (sports fields, factory buildings, silos, dams…), top-N thumbnails + heatmap |
 | `match.py` | Ranks the photo against candidate ground-level images: DINOv2 global similarity + SIFT inlier re-ranking; candidates can be rendered on the fly from panorama ids |
@@ -130,6 +135,6 @@ The endpoints are all at `https://mapsv0.bdimg.com/`, need no key, and must be a
 | Source | Use |
 |---|---|
 | `sun.py` (NOAA algorithm, within ≤0.02° of NREL SPA) | Sun position; replaces SunCalc |
-| Historical daily weather (temperature, sun/rain) | Check "frozen", "sunny"; with a date, exclude overcast or rainy areas |
+| Historical station weather / reanalysis | Test temperature, precipitation, snow and sky hypotheses within the actual station/grid/time coverage. Usually ranking evidence only: a rainy day or coarse overcast grid cannot exclude one sunny street photo; check clock/date and local variability |
 | Historical weather-satellite cloud imagery | Exclude large cloud areas on that day (clearly effective only with typhoons and fronts) |
 | Flightradar24, FlightAware | Flight history by registration; the paid tier can download KML/CSV tracks |
