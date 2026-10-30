@@ -26,7 +26,7 @@ uv run scripts/tiles.py sheet --points pois.json --zoom 18 --out pois_sheet.jpg
 
 - When a label is the specific name of a common facility such as a school or residential compound, first open the "图片来源" ("image source") thumbnails to see whether it's the same place (one call): names on images of playgrounds or housing are mostly assembled by voting over similar images; if it isn't the same place, downgrade it to weak and don't bother getting coordinates.
 - **Facility-type words** in generic labels ("grain drying complex", "cement plant", "greenhouse") are useful: use them to look up where that industry is concentrated, for category inference and candidate areas.
-- When the label is generic ("blocks of housing", "city street", "school playground"), treat it only as weak evidence; if the whole image + one tight crop, one round in each of two engines, give only generic labels, stop; don't keep trying variants.
+- When the label is generic ("blocks of housing", "city street", "school playground"), treat it only as weak evidence. If the whole image and a tight crop in two accessible engines yield only generic labels, switch away from unchanged low-yield searches. A materially justified variant (mirror, perspective rectification, glare/color correction, distinctive-object crop) remains a separate feasible route; use the table below and record what changed. Do not repeat arbitrary variants indefinitely, or treat generic labels as proof that all reverse-search routes are exhausted.
 
 | Situation | What to do | Source |
 |---|---|---|

@@ -1,0 +1,196 @@
+{
+  "suites": [
+    {
+      "suite": "test_board.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_board.py"
+      ],
+      "exit_code": 0,
+      "tests": 32
+    },
+    {
+      "suite": "test_evaluate.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_evaluate.py"
+      ],
+      "exit_code": 0,
+      "tests": 8
+    },
+    {
+      "suite": "test_fspy.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_fspy.py"
+      ],
+      "exit_code": 0,
+      "tests": 17
+    },
+    {
+      "suite": "test_gazetteer.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_gazetteer.py"
+      ],
+      "exit_code": 0,
+      "tests": 12
+    },
+    {
+      "suite": "test_investigation.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_investigation.py"
+      ],
+      "exit_code": 0,
+      "tests": 16
+    },
+    {
+      "suite": "test_kartaview.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_kartaview.py"
+      ],
+      "exit_code": 0,
+      "tests": 15
+    },
+    {
+      "suite": "test_match.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_match.py"
+      ],
+      "exit_code": 0,
+      "tests": 9
+    },
+    {
+      "suite": "test_pose_preflight.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_pose_preflight.py"
+      ],
+      "exit_code": 0,
+      "tests": 12
+    },
+    {
+      "suite": "test_regions.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_regions.py"
+      ],
+      "exit_code": 0,
+      "tests": 29
+    },
+    {
+      "suite": "test_runtime.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_runtime.py"
+      ],
+      "exit_code": 0,
+      "tests": 112
+    },
+    {
+      "suite": "test_sun.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_sun.py"
+      ],
+      "exit_code": 0,
+      "tests": 3
+    },
+    {
+      "suite": "test_terrain.py",
+      "command": [
+        "uv",
+        "run",
+        "skills/geo-sleuth/tests/test_terrain.py"
+      ],
+      "exit_code": 0,
+      "tests": 18
+    }
+  ],
+  "n_suites": 12,
+  "n_tests": 283,
+  "all_passed": true,
+  "duration_seconds": 27.48,
+  "base": "bb5c2400af8cd6f05849d0c5f3346980c0b16d15",
+  "log_redactions": [
+    "workspace absolute prefix",
+    "scratch absolute prefix"
+  ],
+  "tested_file_sha256": {
+    "skills/geo-sleuth/SKILL.md": "1c5da9b61d26df6a233151b5d19f5d34bad763833bca20511f48b49b6a532986",
+    "skills/geo-sleuth/references/aerial.md": "0eb49120f89dc80ee4e0b3514f33efaa911a9e41ecc0841841cd90a85b4fa09b",
+    "skills/geo-sleuth/references/capabilities.md": "d6ed098fd3fbed0593ea3e5865ad5b0e2736bc9f00b2b2116a81a9eb8a668129",
+    "skills/geo-sleuth/references/clues/README.md": "733de69104f86f3145f67adc84c648bd37a0b4bfe9428ae44ff327c50ff5c991",
+    "skills/geo-sleuth/references/clues/global.md": "6e1961e2d71ab85e9fad87618ad169b2750f2e4b152d4095ad6b4e2cf1aca913",
+    "skills/geo-sleuth/references/corridors.md": "f4699c770077ce1d56df3dbae377b9d803ffa7af02252fde2a101711fa5e6a96",
+    "skills/geo-sleuth/references/data-sources.md": "0d428ccbf23d0e9d2b2fbdc55262c7bdc6e6328c78db438bb56b448c32c7cf46",
+    "skills/geo-sleuth/references/evaluation.md": "6ae78e8071c79371f7796750d2c54e20ff1d1c00194cf311323b04c0910850bc",
+    "skills/geo-sleuth/references/geometry-workbench.md": "947f47ac6ffef066b4e61d53ab9921b26ab0b8974d1a2355d53a78d59abb0998",
+    "skills/geo-sleuth/references/geometry.md": "379c438018460e00e63fc0634e159ba67d5e8a3ea36bca592368b8f3546625ed",
+    "skills/geo-sleuth/references/investigation.md": "6f05c69370f4b5bbc216e7b7dc5af6124a3374aea1cfef1aab87bad1b678630b",
+    "skills/geo-sleuth/references/observe.md": "eaef66db7dc3a3d963b27990d206034366774c8791b652df30cad2077cd90bdb",
+    "skills/geo-sleuth/references/rescue-sources.md": "474341a8a1bbd0b5f7cf4c458f40d23fa0979efa041bd958c929232ca7e9b592",
+    "skills/geo-sleuth/references/search.md": "a135112ab0c29ff7baa61632b8bfeaf6f6a0196763c87319fcb58d53966e80c2",
+    "skills/geo-sleuth/references/sky.md": "23dd598d20d1eba300c89cdde11dd39c9191cfcd0384d1c40de8adb1c8df68b4",
+    "skills/geo-sleuth/references/skyline-fallback.md": "43d6245497c53d4066215e3ac735180720da275c72051d402d20d6ba7ede3901",
+    "skills/geo-sleuth/references/verify.md": "281c827f4997389488cb45b0ec075800aabcc4a2220818ef2b202d7c29840105",
+    "skills/geo-sleuth/scripts/_browser.py": "542c7fd5e3d4ddbcfd2a724c934fb7d873788f5680ac6070ad0e46a251581afe",
+    "skills/geo-sleuth/scripts/_device.py": "0fb06ae8b589abcea09cddeac9568aaedc43ac41222e5ca0f1d303b790b890a3",
+    "skills/geo-sleuth/scripts/_image.py": "0f79259df40e1dae1733f2071fcfb80f2612ddbc4bb064a9f5a96681295aba13",
+    "skills/geo-sleuth/scripts/_net.py": "02520f8ae4c0616f9e6a2ed832740a23da4a1d20faff6a84dfcdb5abfb304a6a",
+    "skills/geo-sleuth/scripts/baidu_pano.py": "e835a4eb9cce4f9234f08bd6818dfacb39ac8b58d724d255cc96e5c16c438709",
+    "skills/geo-sleuth/scripts/board.py": "62a9e7c0046a710821dbfc9c9c442336f03ab28447e77e66259017c39d1bc6f2",
+    "skills/geo-sleuth/scripts/clues.py": "642676fb2c7fcc6118325d94877fab8de5d92118898d507ed76c68b9ae1e0ab9",
+    "skills/geo-sleuth/scripts/doctor.py": "fc232d0971d5f931c86f273a862f6c96463ad009cae1f3f12f4f02ed489f54d5",
+    "skills/geo-sleuth/scripts/evaluate.py": "16c2a3f2ee6d4fed6d8f36d7eb83712cb2bb522fb1c72510fc53b1b9f8bbbab8",
+    "skills/geo-sleuth/scripts/evidence.py": "4bb5949afec3eb247e89af3b2991c52786320e0666a0a7d992dfd9b581e1f25c",
+    "skills/geo-sleuth/scripts/exif.py": "3d89a690d47bd1a0b3a5c953ed1f30cdad899fccaf97117ad6c2d92bce0b0223",
+    "skills/geo-sleuth/scripts/fspy.py": "a4cb0f9af5a5ba24bfced82115e626ca1c6254041a4e3ac24d57e2294e7ce9bd",
+    "skills/geo-sleuth/scripts/gazetteer.py": "93b50fb9464c81bfd98797c1e0676c85019870ca7f4735145f5674906331f393",
+    "skills/geo-sleuth/scripts/geo.py": "7ef8c2e51646ac39ab80851ef0faa18eb08dcd149fed8d9509bd5e912ca5fe35",
+    "skills/geo-sleuth/scripts/gsv.py": "8c06f88c0c75d16ae3ba2f9280c09acb13a7750e56555b34005537f5dcc24913",
+    "skills/geo-sleuth/scripts/imgprep.py": "195e671b41ea4036ae1c2d9dddba66f7c432f82536bbc2a7512a66aee1cbe7e7",
+    "skills/geo-sleuth/scripts/intake.py": "5745f7ddb2ed9abd4ee391aac0f1f90ad71ca3c25da45616361271d3e2eafed5",
+    "skills/geo-sleuth/scripts/investigation.py": "b5a3447a38f85c07f4f9abacd2df577c9e50e8bbc2b2d867222457baacedcd75",
+    "skills/geo-sleuth/scripts/kartaview.py": "3d6adc2acf281139aebf5fa082aa0a8e8887cea1f5e60b67ae3a7214cf36d416",
+    "skills/geo-sleuth/scripts/match.py": "79a388c78b17f7959d5f6e7614aaeaffd1e364bcb8c53ba934ab6bb0619c3c12",
+    "skills/geo-sleuth/scripts/ocr.py": "55949b422bffcce6e577b1dea471f8785f0114e48a693a77546b3da72ca6c1f8",
+    "skills/geo-sleuth/scripts/osm.py": "08b63a414ce656a828e44cade821cec0b529e7e4eecbc0d90828d8523316a7cd",
+    "skills/geo-sleuth/scripts/poi.py": "e7e82bf9868b24b75c36594174dfab61b5678742359b3d8054d9774f2a6d4b68",
+    "skills/geo-sleuth/scripts/pose.py": "70b2297bc1a80593c140caad7977c7cb30e83bd5a80e49a8601cb416a04af8fb",
+    "skills/geo-sleuth/scripts/pose_preflight.py": "479ac2510760df3940db07ffcc9edec65f6f83e44ca16997092285b677253957",
+    "skills/geo-sleuth/scripts/refresh.py": "ae5cef48be2a66509dd31d9c4ce5b022a37ed9735797cb66f7eec8dafe9b6375",
+    "skills/geo-sleuth/scripts/regions.py": "7430eab7475029f009aaa18584d1e9e0d87f9de3baa7b525d9890e7148120e7d",
+    "skills/geo-sleuth/scripts/revimg.py": "25a515a47d8bf4e866d96964a84a7d2d816c52975c9774ef768a6b4761c6f3f8",
+    "skills/geo-sleuth/scripts/sat_scan.py": "5ff73aab9e78ba9531dff172c4080a173f7d6880dc30e79058abe205c53278c6",
+    "skills/geo-sleuth/scripts/sun.py": "c0e3292de8375abdc5038fc8b5cdaf6f7769ec9de7205d45a03814f377d8d15b",
+    "skills/geo-sleuth/scripts/terrain.py": "968dfdeabe66a55174e7124263b26d64d53e1ea689c5816e92b154e7fc8ff781",
+    "skills/geo-sleuth/scripts/tiles.py": "4af1f09393915a036176cf52a7fde8cffd3def05deac916bb8910e9e54472f31",
+    "skills/geo-sleuth/tests/test_board.py": "aa1b6c3f25a36b62d1bf9029bead5df7b885c2008b3bef01a010620937f4cbb7",
+    "skills/geo-sleuth/tests/test_evaluate.py": "5c1dd33e4f8cf535aac702c362b7cd7da75c9335050607acccc5f42b95280fcd",
+    "skills/geo-sleuth/tests/test_fspy.py": "1a9bde2828479d2e2d1bfd496c25cdeb12cae7ed23dd019b98d4d2f2d53cb40b",
+    "skills/geo-sleuth/tests/test_gazetteer.py": "a7a007cc72ec1cb2ab0701cafdc4f127d2cd1500f944ebea9e296c728a5248e3",
+    "skills/geo-sleuth/tests/test_investigation.py": "3ed6c600feebeed4ba2d26ada89c857e5e05bc64f50a3491180398c60cbf3b0c",
+    "skills/geo-sleuth/tests/test_kartaview.py": "78f54f61d3a78924ed5d80e1154076fd6367229f1b4b734ed0b66d192fedd2ea",
+    "skills/geo-sleuth/tests/test_match.py": "596836d75059815e936969e89d0da4c07b2511682464a87031214b734ab9310e",
+    "skills/geo-sleuth/tests/test_pose_preflight.py": "3117aeddce77d554d6fccd96a617afedf7875ea9d113a57e41d334c32de9b72e",
+    "skills/geo-sleuth/tests/test_regions.py": "f258d598a3b848acfe347ff2ac14a8230542dc66af3f441ccf467c445b715db1",
+    "skills/geo-sleuth/tests/test_runtime.py": "a2a3a9ab1098da9885d6c0ef1c44ed7af41281504a0a3ce9f9b3786437798326",
+    "skills/geo-sleuth/tests/test_sun.py": "e563d883e331f1d9b6416c79e22710c2e4473b3b2689ca949df0bf70ccfc20b3",
+    "skills/geo-sleuth/tests/test_terrain.py": "95c0f259aa03e3aa3a63a3cfb000354ff5ccf68b9f9dc2aa51bd6f40fba6b724"
+  }
+}

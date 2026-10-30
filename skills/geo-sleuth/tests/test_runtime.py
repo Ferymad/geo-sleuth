@@ -83,6 +83,18 @@ class NetworkTests(unittest.TestCase):
             server.server_close()
             thread.join()
 
+    def test_fetch_transport_exceptions_have_actionable_redacted_errors(self):
+        cases = [(FileNotFoundError("secret executable path"), "curl is not available"),
+                 (PermissionError("secret path"), "curl could not start"),
+                 (subprocess.TimeoutExpired(["curl", "http://user:secret@example.invalid"], 2), "time limit")]
+        for failure, detail in cases:
+            with self.subTest(failure=type(failure).__name__), patch.object(_net.subprocess, "run", side_effect=failure):
+                with self.assertRaises(RuntimeError) as caught:
+                    _net.fetch_bytes("http://user:secret@example.invalid", "http://user:secret@proxy.invalid", timeout=1)
+                self.assertIn(detail, str(caught.exception))
+                self.assertIn("doctor.py --network", str(caught.exception))
+                self.assertNotIn("secret", str(caught.exception))
+
     def test_model_route_overrides_ambient_variables(self):
         with patch.dict(os.environ, {"GEO_PROXY": "http://chosen:8080", "https_proxy": "http://old:8080", "NO_PROXY": "*"}, clear=True):
             _net.model_proxy_env()
@@ -1367,6 +1379,205 @@ class RevimgInputTests(unittest.TestCase):
         self.assertEqual(r.returncode, 2, r.stderr)
         self.assertIn("1 of 1 images could not be read", r.stderr)
         self.assertNotIn("Traceback", r.stderr)
+
+
+class IntakeRecoveryTests(unittest.TestCase):
+    def _search_report(self, records, child_result=(0, "{}", "")):
+        import intake
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            photo = root / "photo.jpg"
+            Image.new("RGB", (40, 30)).save(photo)
+            out = root / "out"
+
+            def run(cmd, **kwargs):
+                if Path(cmd[2]).name == "revimg.py":
+                    rev = out / "rev"
+                    for name, value in records.items():
+                        (rev / name).write_text(value, encoding="utf-8")
+                    return child_result
+                return 0, "{}", ""
+
+            argv = ["intake.py", str(photo), "--out-dir", str(out), "--no-ocr", "--engines", "baidu", "--max-variants", "0"]
+            with patch.object(intake, "_run", side_effect=run), patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                intake.main()
+            return json.loads((out / "intake.json").read_text()), (out / "intake.md").read_text()
+
+    def test_invalid_search_options_fail_before_starting_any_steps(self):
+        import intake
+        for extra in (("--engines", ""), ("--engines", "baidu,baidu"), ("--engines", "typo"), ("--max-variants", "-1")):
+            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as folder:
+                photo = Path(folder) / "photo.jpg"
+                Image.new("RGB", (40, 30)).save(photo)
+                out = Path(folder) / "out"
+                argv = ["intake.py", str(photo), "--out-dir", str(out), "--no-ocr", *extra]
+                with patch.object(intake, "_run", return_value=(0, "{}", "")) as run, patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                    intake.main()
+                self.assertEqual(caught.exception.code, 2)
+                run.assert_not_called()
+                self.assertFalse(out.exists())
+
+    @unittest.skipIf(os.name == "nt", "POSIX process groups")
+    def test_timeout_stops_descendants_and_keeps_partial_diagnostics(self):
+        import intake
+        import time
+        with tempfile.TemporaryDirectory() as folder:
+            marker = Path(folder) / "escaped.txt"
+            child = f"import time; from pathlib import Path; time.sleep(0.7); Path({str(marker)!r}).write_text('escaped')"
+            parent = f"import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', {child!r}]); print('completed variant', flush=True); print('provider stalled', file=sys.stderr, flush=True); time.sleep(10)"
+            rc, stdout, stderr = intake._run([sys.executable, "-c", parent], timeout=0.3)
+            time.sleep(0.8)
+            self.assertEqual(rc, 124)
+            self.assertIn("completed variant", stdout)
+            self.assertIn("provider stalled", stderr)
+            self.assertIn("timed out", stderr)
+            self.assertFalse(marker.exists(), "timed-out descendants continued writing")
+
+    @unittest.skipIf(os.name == "nt", "POSIX process groups")
+    def test_timeout_stops_descendant_after_group_leader_exits(self):
+        import intake
+        import time
+        with tempfile.TemporaryDirectory() as folder:
+            marker = Path(folder) / "escaped.txt"
+            child = f"import time; from pathlib import Path; print('descendant', flush=True); time.sleep(0.7); Path({str(marker)!r}).write_text('escaped')"
+            parent = f"import subprocess, sys; subprocess.Popen([sys.executable, '-c', {child!r}])"
+            rc, stdout, stderr = intake._run([sys.executable, "-c", parent], timeout=0.3)
+            time.sleep(0.8)
+            self.assertEqual(rc, 124)
+            self.assertIn("descendant", stdout)
+            self.assertIn("timed out", stderr)
+            self.assertFalse(marker.exists())
+
+    def test_stale_reverse_record_is_rejected_before_any_child_runs(self):
+        import intake
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            photo = root / "photo.jpg"
+            Image.new("RGB", (40, 30)).save(photo)
+            out = root / "out"
+            rev = out / "rev"
+            rev.mkdir(parents=True)
+            old = rev / "photo_baidu.json"
+            old.write_text('{"guess": [], "links": []}')
+            before = old.read_bytes()
+            argv = ["intake.py", str(photo), "--out-dir", str(out), "--no-ocr"]
+            with patch.object(intake, "_run") as run, patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                intake.main()
+            self.assertEqual(caught.exception.code, 2)
+            run.assert_not_called()
+            self.assertEqual(old.read_bytes(), before)
+            self.assertFalse((out / "intake.json").exists())
+
+    def test_missing_search_record_is_not_success(self):
+        report, markdown = self._search_report({})
+        self.assertEqual(report["result"], "partial")
+        self.assertIn("0 of 1", report["status"]["rev-baidu"])
+        self.assertIn("partial", markdown)
+
+    def test_reused_output_directory_is_rejected_without_losing_evidence(self):
+        import intake
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            photo = root / "photo.jpg"
+            Image.new("RGB", (40, 30)).save(photo)
+            out = root / "out"
+            out.mkdir()
+            old = out / "ocr.json"
+            old.write_text('{"items": [{"text": "old location"}]}')
+            before = old.read_bytes()
+            argv = ["intake.py", str(photo), "--out-dir", str(out), "--no-ocr", "--no-rev"]
+            with patch.object(intake, "_run", return_value=(0, "{}", "")) as run, patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                intake.main()
+            self.assertEqual(caught.exception.code, 2)
+            run.assert_not_called()
+            self.assertEqual(old.read_bytes(), before)
+            self.assertFalse((out / "intake.json").exists())
+
+    def test_malformed_search_record_keeps_a_report_and_valid_sibling(self):
+        import intake
+        for malformed in ("{truncated", "[]", '{"guess": [null]}', '{"guess": {}}', '{"links": [1]}',
+                          '{"links": [{"title": null}]}', '{"similar": [null]}', '{"error": 7}'):
+            with self.subTest(record=malformed), tempfile.TemporaryDirectory() as folder:
+                rev = Path(folder)
+                (rev / "good_baidu.json").write_text('{"guess": ["London"], "links": []}')
+                (rev / "bad_yandex.json").write_text(malformed)
+                entries, votes = intake._collect_rev(rev)
+                self.assertEqual(len(entries), 2)
+                self.assertTrue(next(e for e in entries if e["engine"] == "yandex")["error"])
+                self.assertEqual(votes["city"]["London"], ["baidu"])
+        report, _ = self._search_report({"photo_baidu.json": "{truncated"})
+        self.assertEqual(report["result"], "partial")
+
+    def test_contentless_search_record_is_not_success(self):
+        report, markdown = self._search_report({"photo_baidu.json": "{}"})
+        self.assertEqual(report["result"], "partial")
+        self.assertIn("photo_baidu.json", report["status"]["rev-baidu"])
+        self.assertIn("incomplete", report["status"]["rev-baidu"])
+        self.assertIn("partial", markdown)
+
+    def test_incomplete_fields_keep_named_error_and_valid_sibling(self):
+        import intake
+        bad_records = [{}, {"guess": []}, {"links": []}, {"guess": None, "links": []},
+                       {"guess": [], "links": None}, {"guess": [], "links": [{}]},
+                       {"guess": [], "links": [], "similar": None},
+                       {"guess": [], "links": [], "similar": [{}]},
+                       {"guess": [], "links": [], "refused": "false"},
+                       {"guess": [], "links": [], "url": []}, {"error": ""}, {"error": None}]
+        for bad in bad_records:
+            with self.subTest(record=bad), tempfile.TemporaryDirectory() as folder:
+                rev = Path(folder)
+                (rev / "bad_baidu.json").write_text(json.dumps(bad))
+                (rev / "good_yandex.json").write_text('{"guess": ["London"], "links": []}')
+                entries, votes = intake._collect_rev(rev)
+                self.assertEqual(len(entries), 2)
+                error = next(e for e in entries if e["engine"] == "baidu")["error"]
+                self.assertIn("bad_baidu.json", error)
+                self.assertEqual(votes["city"]["London"], ["yandex"])
+
+    def test_provider_envelopes_work_without_screenshots(self):
+        import intake
+        for engine in ("baidu", "yandex"):
+            for populated in (False, True):
+                with self.subTest(engine=engine, populated=populated), tempfile.TemporaryDirectory() as folder:
+                    record = {"url": "https://example.invalid/search", "text_head": "", "guess": [], "links": [],
+                              "image": "photo.jpg", "engine": engine, "screenshot": "absent.png"}
+                    if populated:
+                        record["links"] = [{"title": "Source", "url": "https://example.invalid", "site": "example.invalid"}]
+                    if engine == "baidu":
+                        record["similar"] = ([{"thumb": "https://example.invalid/t.jpg", "from": "", "site": ""}]
+                                             if populated else [])
+                    (Path(folder) / f"photo_{engine}.json").write_text(json.dumps(record))
+                    entries, _ = intake._collect_rev(Path(folder))
+                    self.assertIsNone(entries[0]["error"])
+
+    def test_provider_error_urls_do_not_echo_credentials(self):
+        secret_error = "fetch https://user:secret@example.invalid/search failed"
+        report, markdown = self._search_report({"photo_baidu.json": json.dumps({"error": secret_error})})
+        self.assertNotIn("user:secret", json.dumps(report) + markdown)
+        self.assertIn("example.invalid", report["status"]["rev-baidu"])
+
+    def test_child_failure_keeps_valid_records_and_redacts_diagnostics(self):
+        for rc in (1, 124):
+            with self.subTest(returncode=rc):
+                report, markdown = self._search_report(
+                    {"photo_baidu.json": '{"guess": ["London"], "links": []}'},
+                    (rc, "", "request https://user:secret@example.invalid failed"))
+                self.assertEqual(report["result"], "partial")
+                self.assertEqual(report["votes"]["city"]["London"], ["baidu"])
+                self.assertIsNone(report["rev"][0]["error"])
+                self.assertNotIn("user:secret", json.dumps(report) + markdown)
+
+    def test_completed_empty_search_is_still_success(self):
+        report, _ = self._search_report({"photo_baidu.json": '{"guess": [], "links": [], "similar": []}'})
+        self.assertEqual(report["result"], "ok")
+        self.assertEqual(report["status"]["rev-baidu"], "ok")
+        self.assertEqual(report["votes"], {"city": {}, "place": {}})
+
+    def test_provider_error_is_partial_even_when_child_exits_zero(self):
+        report, markdown = self._search_report({"photo_baidu.json": json.dumps({"error": "verification required"})})
+        self.assertEqual(report["result"], "partial")
+        self.assertIn("verification required", report["status"]["rev-baidu"])
+        self.assertIn("**Result: partial.**", markdown)
 
 
 class IntakeStatusTests(unittest.TestCase):

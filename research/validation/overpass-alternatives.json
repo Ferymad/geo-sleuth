@@ -1,0 +1,16 @@
+[
+  {
+    "url": "https://overpass.private.coffee/api/interpreter",
+    "query": "[out:json][timeout:10];node(48.8582,2.2943,48.8585,2.2946);out count;",
+    "exit_code": 28,
+    "stdout": "",
+    "stderr": "curl: (28) Operation timed out after 20005 milliseconds with 0 bytes received\n"
+  },
+  {
+    "url": "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "query": "[out:json][timeout:10];node(48.8582,2.2943,48.8585,2.2946);out count;",
+    "exit_code": 28,
+    "stdout": "",
+    "stderr": "curl: (28) Operation timed out after 20003 milliseconds with 0 bytes received\n"
+  }
+]

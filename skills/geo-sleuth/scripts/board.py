@@ -31,6 +31,7 @@ Rules are written as code, not left to self-discipline:
   apply      lookup clues (calling code, driving side, territories; plates, area codes… from region packs) add candidates and evidence automatically (uses clues.py)
   move       put a candidate under another candidate (a point under its road) so its supporting evidence counts there
   country    set the country context: apply restricts region-pack lookups to it, next uses its pack's tips
+  relocate-files  repair legacy relative artifact paths with an explicit --base original directory
   log        print the ledger
 
 Examples:
@@ -142,6 +143,23 @@ def _pages(bb: list[float], zoom: int, cell: int, cols: int) -> int:
     return math.ceil(r * c / (cols * cols))
 
 
+def _effective_evidence(b: dict) -> list[dict]:
+    """One estimate per clue/candidate; the last legacy entry is its revision.
+
+    Reading a board must not multiply old duplicates or rewrite the ledger.
+    """
+    return list({(e["clue"], e["candidate"]): e for e in b["evidence"]}.values())
+
+
+def _verified_support(b: dict, e: dict) -> bool:
+    cl = b["clues"][e["clue"]]
+    # An opposing/neutral test is not confirmation. Prefer the comparison file
+    # when supplied; otherwise the original clue's artifact backs the claim.
+    artifact = e.get("file") or cl.get("file")
+    return (e["lr"] > 1 and cl["status"] in ("read", "computed")
+            and bool(artifact) and Path(artifact).is_file())
+
+
 def _inherited(b: dict, name: str, own_clues: set[str]) -> list[dict]:
     """Support flows up, refutation doesn't: a point that matches supports its road, a point that doesn't match says nothing about the rest of the road.
     Per clue the strongest supporting evidence among descendants, for clues the candidate has no evidence of its own."""
@@ -150,13 +168,14 @@ def _inherited(b: dict, name: str, own_clues: set[str]) -> list[dict]:
         if c.get("parent") and c.get("status") != "excluded":
             kids.setdefault(c["parent"], []).append(n)
     seen, todo, best = {name}, list(kids.get(name, [])), {}
+    evidence = _effective_evidence(b)
     while todo:
         n = todo.pop()
         if n in seen:
             continue
         seen.add(n)
         todo += kids.get(n, [])
-        for e in b["evidence"]:
+        for e in evidence:
             if e["candidate"] == n and e["lr"] > 1 and e["clue"] not in own_clues and e["lr"] > best.get(e["clue"], {}).get("lr", 1):
                 best[e["clue"]] = {**e, "via": n}
     return list(best.values())
@@ -164,6 +183,7 @@ def _inherited(b: dict, name: str, own_clues: set[str]) -> list[dict]:
 
 def _scores(b: dict, level: str, prior_by: str) -> list[dict]:
     rows = []
+    evidence = _effective_evidence(b)
     for name, c in b["candidates"].items():
         if c["level"] != level:
             continue
@@ -171,12 +191,12 @@ def _scores(b: dict, level: str, prior_by: str) -> list[dict]:
         if prior_by == "area" and c.get("bbox"):
             prior = max(_bbox_km2(c["bbox"]), 1.0)
         logit = math.log(prior) + math.log(max(c.get("prior", 1.0), 1e-9))
-        ev = [e for e in b["evidence"] if e["candidate"] == name]
+        ev = [e for e in evidence if e["candidate"] == name]
         ev += _inherited(b, name, {e["clue"] for e in ev})
         for e in ev:
             logit += math.log(max(e["lr"], 1e-9))
         rows.append({"name": name, "logit": logit, "n_ev": len(ev),
-                     "n_verified": sum(1 for e in ev if b["clues"][e["clue"]]["status"] in ("read", "computed")),
+                     "n_verified": sum(1 for e in ev if _verified_support(b, e)),
                      "excluded": c.get("status") == "excluded", "c": c, "ev": ev})
     open_rows = [r for r in rows if not r["excluded"]]
     if open_rows:
@@ -228,6 +248,40 @@ def _country_code(text: str) -> str:
               f"lookups that need a pack will answer unsupported, global tools still work.")
         return text.upper()
     return pk["code"]
+
+
+def cmd_relocate_files(args, p: Path) -> None:
+    """Repair legacy paths only against the operator-declared original cwd."""
+    b = _load(p)
+    base = args.base.resolve()
+    if not base.is_dir():
+        sys.exit(f"Artifact base is not a directory: {base}")
+    refs = [(f"clue {k}", c, "file") for k, c in b["clues"].items()]
+    refs += [(f"evidence {e.get('id', '?')}", e, "file") for e in b["evidence"]]
+    refs += [(f"exclusion {n}", c["excluded_by"], "computed")
+             for n, c in b["candidates"].items() if c.get("excluded_by")]
+    changes = []
+    for label, record, key in refs:
+        value = record.get(key)
+        if not value:
+            continue
+        artifact = Path(value)
+        try:
+            target = artifact if artifact.is_absolute() else (base / artifact).resolve(strict=True)
+            if not target.is_file():
+                raise ValueError("not a regular file")
+        except (OSError, RuntimeError, ValueError) as exc:
+            sys.exit(f"Cannot relocate {label}: {value} using --base {base}: {exc}; board unchanged")
+        if not artifact.is_absolute():
+            changes.append((record, key, str(target)))
+    # Validate every reference before mutating or saving anything. Never search
+    # the board directory or current cwd for alternate matches.
+    if changes:
+        for record, key, target in changes:
+            record[key] = target
+        _log(b, f"relocate-files --base {base}: {len(changes)} paths")
+        _save(p, b)
+    print(f"Relocated {len(changes)} artifact paths using {base}")
 
 
 def cmd_country(args, p: Path) -> None:
@@ -451,6 +505,7 @@ def cmd_clue(args, p: Path) -> None:
             sys.exit(f"Unknown clues in --resolves: {', '.join(unknown)}")
         if not output or not Path(output).is_file():
             sys.exit("--resolves requires --file pointing to an existing computed output file")
+    if output:
         output = str(Path(output).resolve())
     kind = _clue_kind(args.kind)
     b["clues"][kid] = {"text": args.text, "kind": kind, "status": args.status, "file": output,
@@ -502,12 +557,12 @@ def cmd_evidence(args, p: Path) -> None:
     clipped, replaced = [], []
     for name, lr in pairs:
         cname = _find(b, name)
-        if lr <= 0:
-            sys.exit("A likelihood ratio of 0 means exclusion; use `board.py exclude` (needs a computed file)")
+        if not math.isfinite(lr) or lr <= 0:
+            sys.exit("A likelihood ratio must be finite and greater than 0; use `board.py exclude` for exclusion (needs a computed file)")
         lr2 = min(max(lr, 1 / cap), cap)
         if abs(lr2 - lr) > 1e-9:
             clipped.append(f"{cname}:{lr:g}→{lr2:g}")
-        rec = {"clue": args.clue, "candidate": cname, "lr": lr2, "why": args.why or "", "file": args.file or "", "cmd": args.command_ or ""}
+        rec = {"clue": args.clue, "candidate": cname, "lr": lr2, "why": args.why or "", "file": str(Path(args.file).resolve()) if args.file else "", "cmd": args.command_ or ""}
         # one clue counts once per candidate: recording it again revises that estimate instead of multiplying it in a second time
         old = _put_evidence(b, rec)
         if old:
@@ -556,7 +611,7 @@ def cmd_exclude(args, p: Path) -> None:
                 f"not enough to exclude the whole thing. Add comparison images for the remaining stretches before excluding, or down-weight first: "
                 f"board.py evidence --clue {args.clue} --against {cname}:0.34 --file {args.computed}")
     c["status"] = "excluded"
-    c["excluded_by"] = {"clue": args.clue, "computed": args.computed, "why": args.why or "",
+    c["excluded_by"] = {"clue": args.clue, "computed": str(Path(args.computed).resolve()), "why": args.why or "",
                         "covers": args.covers or ""}
     cl["used"] = True
     _log(b, f"exclude {cname} by {args.clue} ({args.computed})")
@@ -790,6 +845,7 @@ def _skip_hint(b: dict, name: str) -> str | None:
 
 def cmd_check(args, p: Path) -> None:
     b = _load(p)
+    evidence = _effective_evidence(b)
     ok = True
     print("Pre-conclusion check:")
     for name, c in b["candidates"].items():
@@ -816,18 +872,21 @@ def cmd_check(args, p: Path) -> None:
             ok = False
             print(f"  FAIL evidence for excluding {name} covers only about {r[0]:.0%} (candidate extent diagonal {r[1]:.0f} m): exclusion scope exceeds evidence scope")
     for name, c in b["candidates"].items():
-        if c.get("status") != "excluded" and any(e["candidate"] == name and e["lr"] > 1 for e in b["evidence"]):
+        if c.get("status") != "excluded" and any(e["candidate"] == name and e["lr"] > 1 for e in evidence):
             hint = _skip_hint(b, name)
             if hint:
                 ok = False
                 print(f"  FAIL {hint}")
     lv = _frontier(b)
+    if not lv:
+        ok = False
+        print("  FAIL no non-excluded candidates: add candidates or revisit exclusions before concluding")
     if lv:
         rows = [r for r in _scores(b, lv, args.prior_by) if not r["excluded"]]
         top = rows[0]
         if top["n_verified"] == 0:
             ok = False
-            print(f"  FAIL main answer {top['name']} has no read/computed evidence, only observations and inferences: you can't claim this level or finer")
+            print(f"  FAIL main answer {top['name']} has no supporting read/computed evidence backed by an existing file: you can't claim this level or finer")
         else:
             print(f"  ok   main answer {top['name']}: {top['n_ev']} pieces of evidence, {top['n_verified']} verified")
         weak = [r["name"] for r in rows[1:] if r["share"] >= 0.15]
@@ -838,7 +897,7 @@ def cmd_check(args, p: Path) -> None:
             print(f"  WARN {len(unseen)}/{len(rows)} {LEVEL_LABEL[lv]} candidates have no evidence at all, i.e. were never looked at: "
                   f"{', '.join(unseen[:10])}{' …' if len(unseen) > 10 else ''} → look at each; record evidence --against even when it doesn't match; "
                   f"unseen ones don't count as excluded; state this in the conclusion")
-        down = [(e["candidate"], e["clue"]) for e in b["evidence"]
+        down = [(e["candidate"], e["clue"]) for e in evidence
                 if e["lr"] < 1 and b["clues"][e["clue"]]["status"] in ("inferred", "observed")
                 and b["candidates"][e["candidate"]].get("status") != "excluded"]
         if down:
@@ -849,7 +908,7 @@ def cmd_check(args, p: Path) -> None:
             print(f"  WARN {k} is {c['status']} but has no file: text read needs a zoomed image, computed results need an output file")
     # fine-level answer needs the evidence image the Output section asks for
     fine = [n for n, c in b["candidates"].items() if c["level"] in ("area", "road", "point") and c.get("status") != "excluded"
-            and any(e["candidate"] == n and e["lr"] > 1 for e in b["evidence"])]
+            and any(e["candidate"] == n and e["lr"] > 1 for e in evidence)]
     if fine:
         ev = Path(args.evidence) if args.evidence else p.parent / "evidence.jpg"
         if not ev.exists():
@@ -865,13 +924,27 @@ def cmd_check(args, p: Path) -> None:
         if b["falsify"].get(name):
             print(f"  ok   {name} falsification condition: {'; '.join(b['falsify'][name])}")
     print("Result: " + ("pass" if ok else "has FAIL, fix those first"))
+    if not ok and getattr(args, "strict", False):
+        raise SystemExit(1)
+
+
+def _report_entries(rep: dict) -> dict[str, list]:
+    """Exact top-level text generated from a structured board report."""
+    return {
+        "alternatives": [f"{a['name']} (share {a['share']:.0%}): {a['how_to_separate']}"
+                         for a in rep.get("alternatives", [])],
+        "excluded": [f"{x['name']}: {x['why']} ({x['computed']})" for x in rep.get("excluded", [])],
+        "unused_clues": list(rep.get("unused_clues", [])),
+    }
 
 
 def cmd_report(args, p: Path) -> None:
     b = _load(p)
+    evidence = _effective_evidence(b)
     lv = _frontier(b)
     rep = {"candidate_levels": {}, "main": None, "alternatives": [], "excluded": [], "unused_clues": [],
-           "downweighted_not_excluded": [], "falsify": b["falsify"]}
+           "downweighted_not_excluded": [], "falsify": b["falsify"],
+           "score_note": "Shares are relative ranking weights over listed candidates, not calibrated probabilities or proof of coordinate precision."}
     for l2 in LEVELS:
         rows = _scores(b, l2, args.prior_by)
         if rows:
@@ -882,7 +955,7 @@ def cmd_report(args, p: Path) -> None:
         top = rows[0]
         rep["main"] = {"level": lv, "name": top["name"], "share": round(top["share"], 3),
                        "evidence": [{"clue": b["clues"][e["clue"]]["text"], "status": b["clues"][e["clue"]]["status"],
-                                     "lr": e["lr"], "why": e["why"], "file": e["file"], **({"via": e["via"]} if e.get("via") else {})}
+                                     "lr": e["lr"], "why": e["why"], "file": e.get("file") or b["clues"][e["clue"]].get("file", ""), **({"via": e["via"]} if e.get("via") else {})}
                                     for e in top["ev"]]}
         for r in rows[1:]:
             if r["share"] >= 0.05:
@@ -890,34 +963,39 @@ def cmd_report(args, p: Path) -> None:
                                             "how_to_separate": "run one cheap test on both together (terrain/livery/municipal fixtures/water template), or scan the first 3 pages of each built-up area"})
         rep["unexamined"] = _unseen(rows, lv)
     rep["level_gaps"] = [h for n, c in b["candidates"].items() if c.get("status") != "excluded"
-                         and any(e["candidate"] == n and e["lr"] > 1 for e in b["evidence"]) for h in [_skip_hint(b, n)] if h]
+                         and any(e["candidate"] == n and e["lr"] > 1 for e in evidence) for h in [_skip_hint(b, n)] if h]
     for name, c in b["candidates"].items():
         if c.get("status") == "excluded":
             ex = c.get("excluded_by", {})
             rep["excluded"].append({"name": name, "clue": b["clues"].get(ex.get("clue"), {}).get("text", ""),
                                     "computed": ex.get("computed"), "why": ex.get("why", "")})
     rep["unused_clues"] = [c["text"] for c in b["clues"].values() if not c["used"]]
-    rep["downweighted_not_excluded"] = sorted({e["candidate"] for e in b["evidence"] if e["lr"] < 1
+    rep["downweighted_not_excluded"] = sorted({e["candidate"] for e in evidence if e["lr"] < 1
                                                and b["clues"][e["clue"]]["status"] in ("inferred", "observed")
                                                and b["candidates"][e["candidate"]].get("status") != "excluded"})
     if args.merge:
         mp = Path(args.merge)
         base = json.loads(mp.read_text(encoding="utf-8")) if mp.exists() else {}
         if rep["main"] and isinstance(base.get("lat"), (int, float)) and isinstance(base.get("lon"), (int, float)):
-            inside = _inside(b["candidates"][rep["main"]["name"]], base["lat"], base["lon"], pad_m=max(30, float(base.get("radius_m") or 0)))
+            # Compare the nominated coordinate itself. An arbitrary uncertainty
+            # radius must not turn a different location into the board's leader.
+            inside = _inside(b["candidates"][rep["main"]["name"]], base["lat"], base["lon"], pad_m=30)
             if inside is False:
                 rep["main_mismatch"] = (f"result.json lat/lon is outside the board's main answer {rep['main']['name']} ({rep['main']['level']}): "
                                         f"the answer's candidate isn't on that level, or the board ranking disagrees with the conclusion")
+        previous = _report_entries(base.get("board") or {})
+        for field, generated in _report_entries(rep).items():
+            manual = list(base.get(field, []))
+            # Remove only the exact prior generated occurrences. Similar text
+            # and additional identical user entries are not board-owned.
+            for old in previous[field]:
+                if old in manual:
+                    manual.remove(old)
+            base[field] = generated + manual
         base["board"] = rep
-        if rep["alternatives"]:
-            base.setdefault("alternatives", [])
-            base["alternatives"] = [f"{a['name']} (share {a['share']:.0%}): {a['how_to_separate']}" for a in rep["alternatives"]] + \
-                [x for x in base.get("alternatives", []) if not isinstance(x, str) or "(share " not in x]
-        base["excluded"] = [f"{x['name']}: {x['why']} ({x['computed']})" for x in rep["excluded"]] or base.get("excluded", [])
-        base["unused_clues"] = rep["unused_clues"] or base.get("unused_clues", [])
         mp.write_text(json.dumps(base, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"Merged into {mp} (board field + alternatives/excluded/unused_clues)")
-    print(json.dumps(rep, ensure_ascii=False, indent=1)[:4000])
+    print(json.dumps(rep, ensure_ascii=False, indent=1))
     for w in rep["level_gaps"] + ([rep["main_mismatch"]] if rep.get("main_mismatch") else []):
         print(f"WARN {w}")
     if rep["main"] and rep["alternatives"]:
@@ -999,6 +1077,15 @@ def _country_key(b: dict, m: dict) -> str | None:
 
 def cmd_apply(args, p: Path) -> None:
     b = _load(p)
+    if args.clue and args.clue not in b["clues"]:
+        sys.exit(f"No clue {args.clue}; run `board.py clue` first")
+    if not math.isfinite(args.lr) or args.lr <= 0:
+        sys.exit("A likelihood ratio must be finite and greater than 0")
+    status = b["clues"][args.clue]["status"] if args.clue else "read"
+    cap = LR_CAP[status]
+    lr = min(max(args.lr, 1 / cap), cap)
+    if lr != args.lr:
+        print(f"Clue status {status}: likelihood ratio clamped to 1/{cap:g}–{cap:g}: {args.lr:g}→{lr:g}")
     cl = HERE / "clues.py"
     country = args.country or b.get("country")
     # The country context only narrows region-pack lookups. Global kinds read --country as an observation target
@@ -1017,13 +1104,12 @@ def cmd_apply(args, p: Path) -> None:
     if not kid:
         kid = f"K{len(b['clues']) + 1}"
         b["clues"][kid] = {"text": f"{args.kind} {args.value}", "kind": args.kind, "status": "read",
-                           "file": args.file or "", "source": d.get("source", ""), "used": False}
+                           "file": str(Path(args.file).resolve()) if args.file else "", "source": d.get("source", ""), "used": False}
     if not matches:
         what = "Lookup not supported" if d.get("status") == "unsupported" else "Lookup returned nothing"
         print(f"{what}: {d.get('note', '')}. Clue {kid} recorded, no evidence added.")
         _save(p, b)
         return
-    lr = args.lr
     touched: dict[tuple[str, str], None] = {}
     why = f"lookup {args.kind}={args.value}"
 
@@ -1033,7 +1119,7 @@ def cmd_apply(args, p: Path) -> None:
             return
         touched[(lv, cname)] = None
         _put_evidence(b, {"clue": kid, "candidate": cname, "lr": lr,
-                          "why": why, "file": args.file or "", "cmd": f"clues.py lookup {args.kind} {args.value}"})
+                          "why": why, "file": str(Path(args.file).resolve()) if args.file else "", "cmd": f"clues.py lookup {args.kind} {args.value}"})
 
     for m in matches:
         code = m.get("country_code")
@@ -1111,6 +1197,9 @@ def main() -> None:
     i.add_argument("--force", action="store_true")
     i.add_argument("--country", help="country context when it's already known (code or name): region-pack lookups use only that pack")
 
+    rf = sub.add_parser("relocate-files", help="repair legacy relative artifact paths using their original working directory; validates all files before saving")
+    rf.add_argument("--base", type=Path, required=True, help="operator-declared original directory for relative clue/evidence/exclusion files (no automatic search)")
+
     co = sub.add_parser("country", help="set the country context (code or name; 'none' clears it)")
     co.add_argument("code")
 
@@ -1179,6 +1268,7 @@ def main() -> None:
     k = sub.add_parser("check")
     rank_opts(k)
     k.add_argument("--evidence", help="evidence image path (default: evidence.jpg next to board.json)")
+    k.add_argument("--strict", action="store_true", help="exit 1 when the pre-conclusion check has FAIL (default keeps the legacy diagnostic-only exit status)")
 
     rp = sub.add_parser("report")
     rank_opts(rp)
@@ -1204,7 +1294,7 @@ def main() -> None:
     fn = {"init": cmd_init, "add": cmd_add, "children": cmd_children, "clue": cmd_clue, "evidence": cmd_evidence,
           "exclude": cmd_exclude, "scan-bbox": cmd_scan_bbox, "urban": cmd_urban, "falsify": cmd_falsify,
           "rank": cmd_rank, "next": cmd_next, "check": cmd_check, "report": cmd_report, "apply": cmd_apply, "log": cmd_log,
-          "country": cmd_country, "move": cmd_move}
+          "country": cmd_country, "move": cmd_move, "relocate-files": cmd_relocate_files}
     fn[args.cmd](args, p)
 
 

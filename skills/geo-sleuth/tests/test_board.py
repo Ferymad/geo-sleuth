@@ -6,8 +6,12 @@
 """Offline board regressions. Run: uv run skills/geo-sleuth/tests/test_board.py"""
 from __future__ import annotations
 
+from argparse import Namespace
+import contextlib
+import io
 import json
 from pathlib import Path
+from unittest.mock import patch
 import subprocess
 import sys
 import tempfile
@@ -246,6 +250,258 @@ class LevelGapTests(unittest.TestCase):
     def test_move_rejects_finer_parent(self):
         self.run_board("add", "spot4", "--level", "point", "--parent", "A ST 100")
         self.run_board("move", "A ST 100", "--parent", "spot4", ok=False)
+
+
+class BoardCorrectnessTests(unittest.TestCase):
+    run_board = CorridorPendingTests.run_board
+    read_board = CorridorPendingTests.read_board
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.path = self.root / "board.json"
+        self.output = self.root / "proof.json"
+        self.output.write_text('{}', encoding="utf-8")
+        self.run_board("init", "--photo", "photo.jpg")
+        self.run_board("add", "A", "B", "--level", "city")
+        self.run_board("clue", "one test", "--kind", "terrain", "--status", "computed",
+                       "--file", str(self.output))
+        self.run_board("evidence", "--clue", "K1", "--for", "A:2", "--file", str(self.output))
+
+    def save(self, data):
+        self.path.write_text(json.dumps(data), encoding="utf-8")
+
+    def test_legacy_duplicate_uses_last_revision_without_rewriting(self):
+        data = self.read_board()
+        data["evidence"][0]["lr"] = 5
+        data["evidence"].append({**data["evidence"][0], "id": "E2", "lr": 2})
+        self.save(data)
+        before = self.path.read_bytes()
+        row = board._scores(data, "city", "none")[0]
+        self.assertAlmostEqual(row["share"], 2 / 3)
+        self.assertEqual((row["n_ev"], row["n_verified"]), (1, 1))
+        self.run_board("rank")
+        self.assertEqual(self.path.read_bytes(), before)
+        self.run_board("evidence", "--clue", "K1", "--for", "A:3")
+        self.assertEqual(len(self.read_board()["evidence"]), 1)
+
+    def test_legacy_descendant_revision_does_not_resurrect_old_support(self):
+        data = self.read_board()
+        data["candidates"]["spot"] = {"level": "point", "parent": "A", "status": "open"}
+        data["evidence"] = [{**data["evidence"][0], "candidate": "spot", "lr": 5},
+                            {**data["evidence"][0], "id": "E2", "candidate": "spot", "lr": 0.2}]
+        self.assertEqual(board._inherited(data, "A", set()), [])
+
+    def test_verified_requires_support_and_an_existing_regular_file(self):
+        for lr, artifact in ((0.5, self.output), (1, self.output), (2, self.root / "missing"), (2, self.root)):
+            with self.subTest(lr=lr, artifact=artifact):
+                data = self.read_board()
+                data["candidates"].pop("B", None)
+                data["evidence"][0].update(lr=lr, file=str(artifact))
+                data["clues"]["K1"]["file"] = str(artifact)
+                self.save(data)
+                self.assertEqual(board._scores(data, "city", "none")[0]["n_verified"], 0)
+                self.assertIn("FAIL main answer A", self.run_board("check").stdout)
+
+    def test_clue_file_can_back_support_and_inherited_support_still_counts(self):
+        data = self.read_board()
+        data["evidence"][0]["file"] = ""
+        self.assertEqual(board._scores(data, "city", "none")[0]["n_verified"], 1)
+        self.save(data)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            board.cmd_report(Namespace(prior_by="none", merge=None), self.path)
+        report, _ = json.JSONDecoder().raw_decode(out.getvalue())
+        self.assertEqual(report["main"]["evidence"][0]["file"], str(self.output))
+        data["candidates"]["spot"] = {"level": "point", "parent": "A", "status": "open"}
+        data["evidence"][0]["candidate"] = "spot"
+        row = board._scores(data, "city", "none")[0]
+        self.assertEqual(row["n_verified"], 1)
+        self.assertEqual(row["ev"][0]["via"], "spot")
+
+    def test_empty_or_all_excluded_board_cannot_pass(self):
+        for empty in (True, False):
+            with self.subTest(empty=empty):
+                data = self.read_board()
+                data["candidates"] = {} if empty else {"A": {"level": "city", "status": "excluded",
+                    "excluded_by": {"computed": str(self.output), "clue": "K1"}}}
+                data["evidence"] = []
+                self.save(data)
+                self.assertIn("FAIL no non-excluded candidates", self.run_board("check").stdout)
+                self.run_board("check", "--strict", ok=False)
+
+    def test_strict_check_fails_and_passes_without_changing_default_exit_contract(self):
+        self.run_board("check", "--strict")
+        self.output.unlink()
+        self.run_board("check")
+        self.run_board("check", "--strict", ok=False)
+
+    def test_invalid_likelihoods_are_atomic(self):
+        before = self.path.read_bytes()
+        for lr in ("nan", "inf", "-inf", "0", "-1"):
+            with self.subTest(lr=lr):
+                self.run_board("evidence", "--clue", "K1", "--for", f"A:{lr}", ok=False)
+                self.assertEqual(self.path.read_bytes(), before)
+
+    def test_apply_respects_existing_clue_status_cap_and_validates_before_lookup(self):
+        data = self.read_board()
+        data["clues"]["K1"]["status"] = "inferred"
+        self.save(data)
+        args = Namespace(kind="calling-code", value="+33", country=None, clue="K1",
+                         file=str(self.output), lr=20.0)
+        response = subprocess.CompletedProcess([], 0, json.dumps({"matches": [{"country": "France"}]}), "")
+        with patch.object(board, "_run", return_value=response), contextlib.redirect_stdout(io.StringIO()):
+            board.cmd_apply(args, self.path)
+        self.assertEqual(next(e["lr"] for e in self.read_board()["evidence"] if e["candidate"] == "France"), 3)
+        before = self.path.read_bytes()
+        for clue, lr in (("missing", 20), ("K1", float("nan")), ("K1", float("inf")), ("K1", 0), ("K1", -2)):
+            with self.subTest(clue=clue, lr=lr), patch.object(board, "_run") as run:
+                args.clue, args.lr = clue, lr
+                with self.assertRaises(SystemExit):
+                    board.cmd_apply(args, self.path)
+                run.assert_not_called()
+                self.assertEqual(self.path.read_bytes(), before)
+
+    def test_report_prints_complete_json_and_labels_scores_not_probabilities(self):
+        data = self.read_board()
+        data["candidates"].pop("B")
+        data["clues"]["K1"]["text"] = "x" * 5000
+        self.save(data)
+        report = json.loads(self.run_board("report").stdout)
+        self.assertEqual(len(report["main"]["evidence"][0]["clue"]), 5000)
+        self.assertIn("not calibrated probabilities", report["score_note"])
+
+    def test_remerge_removes_only_exact_previous_board_entries(self):
+        self.run_board("clue", "stale unused", "--kind", "terrain", "--status", "observed")
+        self.run_board("add", "C", "--level", "city")
+        self.run_board("exclude", "C", "--clue", "K1", "--computed", str(self.output), "--why", "stale exclusion")
+        result = self.root / "result.json"
+        manual = {"alternatives": ["Manual (share 10%): test", {"note": "manual"}],
+                  "excluded": ["manual exclusion"], "unused_clues": ["manual unused"]}
+        result.write_text(json.dumps(manual), encoding="utf-8")
+        self.run_board("report", "--merge", str(result))
+        first = json.loads(result.read_text(encoding="utf-8"))
+        self.assertTrue(all(first["board"][field] for field in manual))
+        self.run_board("report", "--merge", str(result))
+        self.assertEqual(json.loads(result.read_text(encoding="utf-8")), first)
+        data = self.read_board()
+        data["candidates"].pop("B")
+        data["candidates"]["C"]["status"] = "open"
+        data["clues"]["K2"]["used"] = True
+        self.save(data)
+        self.run_board("evidence", "--clue", "K1", "--for", "A:50")
+        self.run_board("report", "--merge", str(result))
+        merged = json.loads(result.read_text(encoding="utf-8"))
+        for field, entries in manual.items():
+            self.assertEqual(merged[field], entries)
+        self.run_board("report", "--merge", str(result))
+        self.assertEqual(json.loads(result.read_text(encoding="utf-8")), merged)
+
+    def test_merge_without_provenance_preserves_entries_even_if_generated_looking(self):
+        result = self.root / "result.json"
+        manual = {"alternatives": ["Old (share 10%): test"],
+                  "excluded": ["old"], "unused_clues": ["old"]}
+        result.write_text(json.dumps(manual), encoding="utf-8")
+        self.run_board("report", "--merge", str(result))
+        merged = json.loads(result.read_text(encoding="utf-8"))
+        for field, entries in manual.items():
+            self.assertEqual(merged[field][-len(entries):], entries)
+        # Even an identical manually added occurrence survives a remerge.
+        generated = merged["alternatives"][0]
+        merged["alternatives"].append(generated)
+        result.write_text(json.dumps(merged), encoding="utf-8")
+        self.run_board("report", "--merge", str(result))
+        self.assertEqual(json.loads(result.read_text(encoding="utf-8")), merged)
+
+    def test_large_claimed_radius_cannot_hide_a_coordinate_mismatch(self):
+        data = self.read_board()
+        data["candidates"]["A"]["bbox"] = [49.0, -123.0, 49.001, -122.999]
+        data["candidates"].pop("B")
+        self.save(data)
+        result = self.root / "result.json"
+        result.write_text(json.dumps({"lat": 50.0, "lon": -122.0, "radius_m": 500000}), encoding="utf-8")
+        self.run_board("report", "--merge", str(result))
+        merged = json.loads(result.read_text(encoding="utf-8"))
+        self.assertIn("main_mismatch", merged["board"])
+        self.assertEqual((merged["lat"], merged["lon"], merged["radius_m"]), (50.0, -122.0, 500000))
+
+    def run_elsewhere(self, *args, ok=True):
+        elsewhere = self.root / "resumed"
+        elsewhere.mkdir(exist_ok=True)
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "board.py"), "--board", str(self.path), *args],
+            cwd=elsewhere, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode == 0, ok, result.stdout + result.stderr)
+        return result
+
+    def legacy_paths(self):
+        data = self.read_board()
+        data["clues"]["K1"]["file"] = "proof.json"
+        data["evidence"][0]["file"] = "proof.json"
+        data["candidates"]["B"].update(status="excluded", excluded_by={
+            "clue": "K1", "computed": "proof.json", "why": "no match"})
+        # Keep this absolute spelling unchanged, not merely equivalent.
+        absolute = str(self.root) + "/./proof.json"
+        data["clues"]["K2"] = {"text": "absolute", "kind": "terrain", "status": "computed",
+                                 "file": absolute, "used": True}
+        self.save(data)
+        return data
+
+    def test_public_relocation_repairs_legacy_paths_for_cross_directory_check_and_report(self):
+        original = self.legacy_paths()
+        before = self.path.read_bytes()
+        self.run_elsewhere("check", "--strict", ok=False)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.run_elsewhere("relocate-files", "--base", str(self.root))
+        repaired = self.read_board()
+        self.assertEqual(repaired["clues"]["K1"]["file"], str(self.output.resolve()))
+        self.assertEqual(repaired["evidence"][0]["file"], str(self.output.resolve()))
+        self.assertEqual(repaired["candidates"]["B"]["excluded_by"]["computed"], str(self.output.resolve()))
+        self.assertEqual(repaired["clues"]["K2"], original["clues"]["K2"])
+        self.run_elsewhere("check", "--strict")
+        report = json.loads(self.run_elsewhere("report").stdout)
+        self.assertEqual(report["candidate_levels"]["city"][0]["verified"], 1)
+        self.assertEqual(report["main"]["evidence"][0]["file"], str(self.output.resolve()))
+        before = self.path.read_bytes()
+        self.run_elsewhere("relocate-files", "--base", str(self.root))
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_public_relocation_invalid_inputs_never_mutate_or_guess(self):
+        original = self.legacy_paths()
+        wrong = self.root / "wrong-base"
+        wrong.mkdir()
+        for args in (("relocate-files",), ("relocate-files", "--base", str(wrong)),
+                     ("relocate-files", "--base", str(self.output)),
+                     ("relocate-files", "--base", str(self.root / "missing-base"))):
+            with self.subTest(args=args):
+                before = self.path.read_bytes()
+                self.run_elsewhere(*args, ok=False)
+                self.assertEqual(self.path.read_bytes(), before)
+        for field in ("clue", "evidence", "exclusion", "absolute"):
+            with self.subTest(field=field):
+                data = json.loads(json.dumps(original))
+                if field == "clue":
+                    data["clues"]["K1"]["file"] = "missing.json"
+                elif field == "evidence":
+                    data["evidence"][0]["file"] = "missing.json"
+                elif field == "exclusion":
+                    data["candidates"]["B"]["excluded_by"]["computed"] = "missing.json"
+                else:
+                    data["clues"]["K2"]["file"] = str(wrong)  # directory, not file
+                self.save(data)
+                before = self.path.read_bytes()
+                self.run_elsewhere("relocate-files", "--base", str(self.root), ok=False)
+                self.assertEqual(self.path.read_bytes(), before)
+
+    def test_new_artifact_paths_survive_a_different_working_directory(self):
+        self.run_board("clue", "relative output", "--kind", "terrain", "--status", "computed", "--file", "proof.json")
+        self.run_board("evidence", "--clue", "K2", "--for", "A:2", "--file", "proof.json")
+        data = self.read_board()
+        self.assertEqual(data["clues"]["K2"]["file"], str(self.output.resolve()))
+        self.assertEqual(data["evidence"][-1]["file"], str(self.output.resolve()))
+        result = subprocess.run([sys.executable, str(SCRIPTS / "board.py"), "--board", str(self.path), "check", "--strict"],
+                                cwd=self.root.parent, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

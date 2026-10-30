@@ -1,0 +1,14 @@
+{
+  "executables": {
+    "exiftool": null,
+    "blender": null,
+    "colmap": null,
+    "qgis_process": null,
+    "gdalinfo": null,
+    "ogrinfo": null,
+    "pdal": null,
+    "fspy": null
+  },
+  "applications": [],
+  "note": "Discovery only; does not certify runtime access or functional capability."
+}

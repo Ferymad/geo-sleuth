@@ -1,0 +1,168 @@
+{
+  "ok": false,
+  "connection": "direct",
+  "checks": [
+    {
+      "name": "Python",
+      "status": "PASS",
+      "detail": "3.13.16",
+      "fix": ""
+    },
+    {
+      "name": "uv",
+      "status": "PASS",
+      "detail": "Available.",
+      "fix": ""
+    },
+    {
+      "name": "curl",
+      "status": "PASS",
+      "detail": "Available.",
+      "fix": ""
+    },
+    {
+      "name": "Working directory",
+      "status": "PASS",
+      "detail": "Writable; reports and .geo-cache can be created here.",
+      "fix": ""
+    },
+    {
+      "name": "Global lookup tables",
+      "status": "PASS",
+      "detail": "All 4 tables are readable.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack ca",
+      "status": "PASS",
+      "detail": "Canada: lookups none.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack cn",
+      "status": "PASS",
+      "detail": "China (mainland): lookups plate, area-code.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack il",
+      "status": "PASS",
+      "detail": "Israel: lookups area-code.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack jp",
+      "status": "PASS",
+      "detail": "Japan: lookups none.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack lk",
+      "status": "PASS",
+      "detail": "Sri Lanka: lookups area-code, plate.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack mm",
+      "status": "PASS",
+      "detail": "Myanmar: lookups none.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack mx",
+      "status": "PASS",
+      "detail": "Mexico: lookups none.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack nz",
+      "status": "PASS",
+      "detail": "New Zealand: lookups none.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack tr",
+      "status": "PASS",
+      "detail": "Turkey: lookups plate, area-code.",
+      "fix": ""
+    },
+    {
+      "name": "Region pack us",
+      "status": "PASS",
+      "detail": "United States: lookups none.",
+      "fix": ""
+    },
+    {
+      "name": "Service connection",
+      "status": "PASS",
+      "detail": "Using direct.",
+      "fix": ""
+    },
+    {
+      "name": "Reverse-search browser",
+      "status": "PASS",
+      "detail": "Google Chrome launched successfully.",
+      "fix": ""
+    },
+    {
+      "name": "OCR",
+      "status": "INFO",
+      "detail": "Apple Vision preferred; RapidOCR fallback.",
+      "fix": "uv run ocr.py <photo> tests recognition; this check does not install or run OCR."
+    },
+    {
+      "name": "ML models",
+      "status": "INFO",
+      "detail": "Not loaded. match.py and sat_scan.py download model weights on first use; allow time and disk space.",
+      "fix": ""
+    },
+    {
+      "name": "Baidu image search",
+      "status": "PASS",
+      "detail": "HTTP 200; reachable (a live operation can still be blocked or rate-limited).",
+      "fix": ""
+    },
+    {
+      "name": "Baidu panoramas",
+      "status": "PASS",
+      "detail": "HTTP 200; reachable (a live operation can still be blocked or rate-limited).",
+      "fix": ""
+    },
+    {
+      "name": "Yandex Images",
+      "status": "PASS",
+      "detail": "HTTP 200; reachable (a live operation can still be blocked or rate-limited).",
+      "fix": ""
+    },
+    {
+      "name": "Google satellite tiles",
+      "status": "PASS",
+      "detail": "HTTP 200; reachable (a live operation can still be blocked or rate-limited).",
+      "fix": ""
+    },
+    {
+      "name": "Overpass",
+      "status": "FAIL",
+      "detail": "Connection failed (curl exit 28).",
+      "fix": "Check DNS, TLS certificates and network access."
+    },
+    {
+      "name": "Elevation tiles",
+      "status": "PASS",
+      "detail": "HTTP 200; reachable (a live operation can still be blocked or rate-limited).",
+      "fix": ""
+    },
+    {
+      "name": "Hugging Face",
+      "status": "PASS",
+      "detail": "HTTP 200; reachable (a live operation can still be blocked or rate-limited).",
+      "fix": ""
+    },
+    {
+      "name": "Google Street View",
+      "status": "PASS",
+      "detail": "Panorama lookup returned a panorama at a covered test point.",
+      "fix": ""
+    }
+  ]
+}
